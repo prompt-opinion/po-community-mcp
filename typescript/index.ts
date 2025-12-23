@@ -1,13 +1,18 @@
-import express from "express";
 import * as tools from "./tools";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp";
+import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp";
 import { IMcpTool } from "./IMcpTool";
+import cors from "cors";
 
-const app = express();
-const port = 5000;
+const app = createMcpExpressApp({ host: "localhost" });
+const port = process.env["PORT"] || 5000;
 
-app.use(express.json());
+app.use(cors());
+
+app.get("/hello-world", async (_, res) => {
+  res.send("Hello World");
+});
 
 app.post("/mcp", async (req, res) => {
   try {
