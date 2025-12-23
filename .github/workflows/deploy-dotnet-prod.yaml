@@ -4,7 +4,7 @@ on:
 
 jobs:
   build-and-deploy:
-    uses: ./.github/workflows/deploy-env.yaml
+    uses: ./.github/workflows/deploy-dotnet-env.yaml
     with:
       AZURE_WEBAPP_NAME: app-opensource-mcp-dotnet-po-prod
     secrets:

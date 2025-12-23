@@ -1,16 +1,16 @@
-name: Deploy to dev (dotnet)
+name: Deploy to dev (typescript)
 on:
   workflow_dispatch:
   push:
     branches:
       - main
     paths:
-      - "dotnet/**"
+      - "typescript/**"
 
 jobs:
   build-and-deploy:
-    uses: ./.github/workflows/deploy-dotnet-env.yaml
+    uses: ./.github/workflows/deploy-ts-env.yaml
     with:
-      AZURE_WEBAPP_NAME: app-opensource-mcp-dotnet-po-dev
+      AZURE_WEBAPP_NAME: app-opensource-mcp-ts-po-dev
     secrets:
       AZURE_CREDENTIALS: ${{ secrets.DEV_AZURE_CREDENTIALS }}

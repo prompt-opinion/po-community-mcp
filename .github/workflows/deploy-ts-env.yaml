@@ -1,0 +1,35 @@
+on:
+  workflow_call:
+    inputs:
+      AZURE_WEBAPP_NAME:
+        required: true
+        type: string
+    secrets:
+      AZURE_CREDENTIALS:
+        required: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download packages
+        run: |
+          npm install
+
+      - name: Login to azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to app service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ inputs.AZURE_WEBAPP_NAME }}
+          package: typescript
+
+      - name: Logout from azure
+        run: |
+          az logout
