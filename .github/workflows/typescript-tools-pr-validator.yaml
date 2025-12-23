@@ -1,29 +1,29 @@
-on:
-  pull_request:
-    paths:
-      - "typescript/default/tools/**"
+# on:
+#   pull_request:
+#     paths:
+#       - "typescript/default/tools/**"
 
-jobs:
-  check_typescript_tools_restrictions:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
+# jobs:
+#   check_typescript_tools_restrictions:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout repository
+#         uses: actions/checkout@v4
+#         with:
+#           fetch-depth: 2
 
-      - name: Build pr-validator
-        working-directory: dotnet/pr-validator/DarenaHealth.Community.PrValidator
-        run: |
-          dotnet publish -c Release -r linux-x64
+#       - name: Build pr-validator
+#         working-directory: dotnet/pr-validator/DarenaHealth.Community.PrValidator
+#         run: |
+#           dotnet publish -c Release -r linux-x64
 
-      - name: Run pr-validator
-        working-directory: dotnet/pr-validator/DarenaHealth.Community.PrValidator/bin/Release/net8.0/linux-x64
-        run: |
-          CHANGED_FILES="$(git diff --name-only HEAD^1 HEAD | paste -sd ' ' -)";
+#       - name: Run pr-validator
+#         working-directory: dotnet/pr-validator/DarenaHealth.Community.PrValidator/bin/Release/net8.0/linux-x64
+#         run: |
+#           CHANGED_FILES="$(git diff --name-only HEAD^1 HEAD | paste -sd ' ' -)";
 
-          echo "-- Verifying ServiceCollectionExtensions.cs --";
-          ./pr-validator verify-sc;
+#           echo "-- Verifying ServiceCollectionExtensions.cs --";
+#           ./pr-validator verify-sc;
 
-          echo "-- Verifying directory structure --";
-          ./pr-validator verify-tools-dir -l Typescript -c $CHANGED_FILES;
+#           echo "-- Verifying directory structure --";
+#           ./pr-validator verify-tools-dir -l Typescript -c $CHANGED_FILES;

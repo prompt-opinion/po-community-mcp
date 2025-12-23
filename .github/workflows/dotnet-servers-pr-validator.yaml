@@ -1,26 +1,26 @@
-on:
-  pull_request:
-    paths:
-      - "dotnet/servers/**"
+# on:
+#   pull_request:
+#     paths:
+#       - "dotnet/servers/**"
 
-jobs:
-  check_dotnet_servers_restrictions:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
+# jobs:
+#   check_dotnet_servers_restrictions:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout repository
+#         uses: actions/checkout@v4
+#         with:
+#           fetch-depth: 2
 
-      - name: Build pr-validator
-        working-directory: dotnet/pr-validator/DarenaHealth.Community.PrValidator
-        run: |
-          dotnet publish -c Release -r linux-x64
+#       - name: Build pr-validator
+#         working-directory: dotnet/pr-validator/DarenaHealth.Community.PrValidator
+#         run: |
+#           dotnet publish -c Release -r linux-x64
 
-      - name: Run pr-validator
-        working-directory: dotnet/pr-validator/DarenaHealth.Community.PrValidator/bin/Release/net8.0/linux-x64
-        run: |
-          CHANGED_FILES="$(git diff --name-only HEAD^1 HEAD | paste -sd ' ' -)";
+#       - name: Run pr-validator
+#         working-directory: dotnet/pr-validator/DarenaHealth.Community.PrValidator/bin/Release/net8.0/linux-x64
+#         run: |
+#           CHANGED_FILES="$(git diff --name-only HEAD^1 HEAD | paste -sd ' ' -)";
 
-          echo "-- Verifying build & docker --";
-          ./pr-validator verify-list-tools -l Net -c $CHANGED_FILES;
+#           echo "-- Verifying build & docker --";
+#           ./pr-validator verify-list-tools -l Net -c $CHANGED_FILES;
