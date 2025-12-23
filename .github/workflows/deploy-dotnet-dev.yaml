@@ -1,0 +1,16 @@
+name: Deploy to dev (dotnet)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "dotnet/**"
+
+jobs:
+  build-and-deploy:
+    uses: ./.github/workflows/deploy-env.yml
+    with:
+      AZURE_WEBAPP_NAME: app-opensource-mcp-dotnet-po-dev
+    secrets:
+      AZURE_CREDENTIALS: ${{ secrets.DEV_AZURE_CREDENTIALS }}

@@ -1,0 +1,11 @@
+name: Deploy to prod (dotnet)
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    uses: ./.github/workflows/deploy-env.yml
+    with:
+      AZURE_WEBAPP_NAME: app-opensource-mcp-dotnet-po-prod
+    secrets:
+      AZURE_CREDENTIALS: ${{ secrets.PROD_AZURE_CREDENTIALS }}
