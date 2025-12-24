@@ -1,3 +1,9 @@
+# Local development
+
+Start with `npm install`.
+
+And then run `npm run start`.
+
 # Debugging with vscode
 
 We use [tsx](https://tsx.is/vscode) to debug the server locally. To debug in vscode:
