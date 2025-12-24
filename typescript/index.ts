@@ -34,10 +34,21 @@ app.get("/hello-world", async (_, res) => {
 
 app.post("/mcp", async (req, res) => {
   try {
-    const server = new McpServer({
-      name: "Typescript Template",
-      version: "1.0.0",
-    });
+    const server = new McpServer(
+      {
+        name: "Typescript Template",
+        version: "1.0.0",
+      },
+      {
+        capabilities: {
+          experimental: {
+            fhir_context_required: {
+              value: true,
+            },
+          },
+        },
+      },
+    );
 
     for (const tool of Object.values<IMcpTool>(tools)) {
       tool.registerTool(server, req);

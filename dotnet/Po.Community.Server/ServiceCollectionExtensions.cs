@@ -1,4 +1,6 @@
-﻿using Po.Community.Core;
+﻿using System.Text.Json.Nodes;
+using ModelContextProtocol.Protocol;
+using Po.Community.Core;
 
 namespace Po.Community.Server;
 
@@ -7,7 +9,15 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddMcpServices(this IServiceCollection services)
     {
         services
-            .AddMcpServer()
+            .AddMcpServer(options =>
+            {
+                options.Capabilities ??= new ServerCapabilities();
+                options.Capabilities.Experimental ??= new Dictionary<string, object>();
+                options.Capabilities.Experimental.Add(
+                    "fhir_context_required",
+                    new JsonObject { ["value"] = true }
+                );
+            })
             .WithHttpTransport()
             .WithListToolsHandler(McpClientListToolsService.Handler)
             .WithCallToolHandler(McpClientCallToolService.Handler);
