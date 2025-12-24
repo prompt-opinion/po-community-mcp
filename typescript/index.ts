@@ -5,7 +5,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { IMcpTool } from "./IMcpTool";
 import cors from "cors";
 
-const app = createMcpExpressApp({ host: "localhost" });
+const app = createMcpExpressApp();
 const port = process.env["PORT"] || 5000;
 
 app.use(cors());
