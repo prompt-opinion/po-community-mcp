@@ -1,0 +1,16 @@
+name: Deploy to prod (typescript)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "typescript/**"
+
+jobs:
+  build-and-deploy:
+    uses: ./.github/workflows/deploy-ts-env.yaml
+    with:
+      AZURE_WEBAPP_NAME: app-opensource-mcp-ts-po-prod
+    secrets:
+      AZURE_CREDENTIALS: ${{ secrets.PROD_AZURE_CREDENTIALS }}
