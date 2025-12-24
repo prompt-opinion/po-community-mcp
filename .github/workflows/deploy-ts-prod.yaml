@@ -1,11 +1,6 @@
 name: Deploy to prod (typescript)
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "typescript/**"
 
 jobs:
   build-and-deploy:
