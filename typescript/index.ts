@@ -5,7 +5,25 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { IMcpTool } from "./IMcpTool";
 import cors from "cors";
 
-const app = createMcpExpressApp();
+const env = process.env["PO_ENV"]?.toString();
+const allowedHosts: string[] = [];
+
+switch (env) {
+  case "dev":
+    allowedHosts.push("ts.fhir-mcp.dev.promptopinion.ai");
+    break;
+  case "prod":
+    allowedHosts.push("ts.fhir-mcp.promptopinion.ai");
+    break;
+  default:
+    allowedHosts.push("localhost");
+}
+
+const app = createMcpExpressApp({
+  host: "0.0.0.0",
+  allowedHosts,
+});
+
 const port = process.env["PORT"] || 5000;
 
 app.use(cors());
