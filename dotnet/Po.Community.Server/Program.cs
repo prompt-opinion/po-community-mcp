@@ -9,6 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder
     .Services.AddOpenApi()
     .AddMcpServices()
+    .AddHttpContextAccessor()
     .AddCors(options =>
     {
         options.AddPolicy(
