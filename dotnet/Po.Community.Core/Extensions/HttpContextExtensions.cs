@@ -18,15 +18,13 @@ public static class HttpContextExtensions
             return null;
         }
 
-        if (
-            !headers.TryGetValue(SharpOnMcpConstants.FhirAccessTokenHeaderName, out var token)
-            || string.IsNullOrWhiteSpace(token)
-        )
+        var token = headers[SharpOnMcpConstants.FhirAccessTokenHeaderName].ToString();
+        if (string.IsNullOrWhiteSpace(token))
         {
-            return null;
+            token = null;
         }
 
-        return new FhirContext { Url = url!, Token = token! };
+        return new FhirContext { Url = url!, Token = token };
     }
 
     public static string? GetPatientIdIfContextExists(this HttpContext httpContext)
@@ -59,7 +57,12 @@ public static class HttpContextExtensions
         }
 
         var settings = new FhirClientSettings { PreferredFormat = ResourceFormat.Json };
-        var handler = new FhirClientAuthMessageHandler(fhirContext.Token);
-        return new FhirClient(fhirContext.Url, settings, handler);
+        return string.IsNullOrWhiteSpace(fhirContext.Token)
+            ? new FhirClient(fhirContext.Url, settings)
+            : new FhirClient(
+                fhirContext.Url,
+                settings,
+                new FhirClientAuthMessageHandler(fhirContext.Token)
+            );
     }
 }

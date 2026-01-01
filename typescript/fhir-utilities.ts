@@ -13,10 +13,6 @@ export const FhirUtilities = {
     }
 
     const token = headers[McpConstants.FhirAccessTokenHeaderName]?.toString();
-    if (!token) {
-      return null;
-    }
-
     return { url, token };
   },
   getPatientIdIfContextExists: (req: Request) => {

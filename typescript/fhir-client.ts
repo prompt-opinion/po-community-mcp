@@ -35,10 +35,11 @@ class FhirClient {
 
   private async _callAxios<T>(config: AxiosRequestConfig, req: Request) {
     const fhirContext = this._getFhirContextOrThrow(req);
-
-    config.headers = {
-      Authorization: `Bearer ${fhirContext.token}`,
-    };
+    if (fhirContext.token) {
+      config.headers = {
+        Authorization: `Bearer ${fhirContext.token}`,
+      };
+    }
 
     try {
       const response = await axios(config);
