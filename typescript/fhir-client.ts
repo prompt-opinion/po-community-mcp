@@ -45,6 +45,7 @@ class FhirClient {
       const response = await axios(config);
       return response.data as T;
     } catch (error) {
+      console.error(error);
       if (isAxiosError(error) && error.response?.status === 404) {
         return null;
       }

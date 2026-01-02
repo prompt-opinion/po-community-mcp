@@ -1,0 +1,13 @@
+name: po-community-mcp
+
+services:
+  typescript:
+    build:
+      dockerfile: ./typescript/Dockerfile
+    ports:
+      - "55000:5000"
+  dotnet:
+    build:
+      dockerfile: ./dotnet/Dockerfile
+    ports:
+      - "55001:8080"
