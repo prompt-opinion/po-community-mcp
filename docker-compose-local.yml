@@ -2,11 +2,13 @@ name: po-community-mcp
 
 services:
   typescript:
+    restart: always
     build:
       dockerfile: ./typescript/Dockerfile
     ports:
       - "55000:5000"
   dotnet:
+    restart: always
     build:
       dockerfile: ./dotnet/Dockerfile
     ports:
