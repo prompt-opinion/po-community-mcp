@@ -1,6 +1,6 @@
 # Local development
 
-On macOS, Python requires a virtual environment before installing packages. Create and activate one first:
+Create and activate a virtual environment first:
 
 ```bash
 python3 -m venv venv
