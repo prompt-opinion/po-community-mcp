@@ -13,3 +13,9 @@ services:
       dockerfile: ./dotnet/Dockerfile
     ports:
       - "55001:8080"
+  python:
+    restart: always
+    build:
+      dockerfile: ./python/Dockerfile
+    ports:
+      - "55002:5001"
