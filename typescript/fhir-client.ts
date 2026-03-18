@@ -6,6 +6,24 @@ import { FhirContext } from "./fhir-context";
 import { fhirR4 } from "@smile-cdr/fhirts";
 
 class FhirClient {
+  async create<T extends { resourceType: string }>(req: Request, resource: T) {
+    const fhirContext = this._getFhirContextOrThrow(req);
+
+    return await this._callAxios<T>(
+      {
+        method: "post",
+        url: this._addPath(fhirContext, resource.resourceType),
+        data: resource,
+        headers: {
+          Accept: "application/fhir+json",
+          "Content-Type": "application/fhir+json",
+          Prefer: "return=representation",
+        },
+      },
+      req,
+    );
+  }
+
   async read<T extends DomainResource>(req: Request, path: string) {
     const fhirContext = this._getFhirContextOrThrow(req);
 
@@ -13,6 +31,9 @@ class FhirClient {
       {
         method: "get",
         url: this._addPath(fhirContext, path),
+        headers: {
+          Accept: "application/fhir+json",
+        },
       },
       req,
     );
@@ -28,6 +49,9 @@ class FhirClient {
           fhirContext,
           `${resourceType}?${searchParameters.join("&")}`,
         ),
+        headers: {
+          Accept: "application/fhir+json",
+        },
       },
       req,
     );
@@ -37,6 +61,7 @@ class FhirClient {
     const fhirContext = this._getFhirContextOrThrow(req);
     if (fhirContext.token) {
       config.headers = {
+        ...(config.headers ?? {}),
         Authorization: `Bearer ${fhirContext.token}`,
       };
     }
