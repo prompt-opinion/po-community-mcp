@@ -6,17 +6,19 @@ namespace Po.Community.Server;
 
 public static class ServiceCollectionExtensions
 {
+    private const string FhirContextExtensionName = "ai.promptopinion/fhir-context";
+
     public static IServiceCollection AddMcpServices(this IServiceCollection services)
     {
         services
             .AddMcpServer(options =>
             {
                 options.Capabilities ??= new ServerCapabilities();
-                options.Capabilities.Experimental ??= new Dictionary<string, object>();
-                options.Capabilities.Experimental.Add(
-                    "fhir_context_required",
-                    new JsonObject { ["value"] = true }
-                );
+
+#pragma warning disable MCPEXP001
+                options.Capabilities.Extensions ??= new Dictionary<string, object>();
+                options.Capabilities.Extensions.Add(FhirContextExtensionName, new JsonObject());
+#pragma warning restore MCPEXP001
             })
             .WithHttpTransport()
             .WithListToolsHandler(McpClientListToolsService.Handler)
