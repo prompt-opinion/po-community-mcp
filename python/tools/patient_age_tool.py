@@ -1,6 +1,8 @@
 from datetime import date
+from typing import Annotated
 
 from mcp.server.fastmcp import FastMCP
+from pydantic import Field
 
 from fhir_client import fhir_client_instance
 from fhir_utilities import get_patient_id_if_context_exists
@@ -11,16 +13,21 @@ from request_context import get_request
 
 class PatientAgeTool(IMcpTool):
     def register_tool(self, mcp: FastMCP) -> None:
-        @mcp.tool(description="Gets the age of a patient.")
-        async def get_patient_age(patient_id: str | None = None) -> str:
+        @mcp.tool(name="GetPatientAge", description="Gets the age of a patient.")
+        async def get_patient_age(
+            patientId: Annotated[  # noqa: N803
+                str | None,
+                Field(description="The id of the patient. This is optional if patient context already exists"),
+            ] = None,
+        ) -> str:
             req = get_request()
 
-            if not patient_id:
-                patient_id = get_patient_id_if_context_exists(req)
-                if not patient_id:
+            if not patientId:
+                patientId = get_patient_id_if_context_exists(req)
+                if not patientId:
                     raise ValueError("No patient context found")
 
-            patient = await fhir_client_instance.read(req, f"Patient/{patient_id}")
+            patient = await fhir_client_instance.read(req, f"Patient/{patientId}")
             if not patient:
                 return create_text_response("The patient could not be found.", is_error=True)
 

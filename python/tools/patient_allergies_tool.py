@@ -9,16 +9,16 @@ from request_context import get_request
 
 class PatientAllergiesTool(IMcpTool):
     def register_tool(self, mcp: FastMCP) -> None:
-        @mcp.tool(description="Gets the known allergies of a patient.")
-        async def get_patient_allergies(patient_id: str | None = None) -> str:
+        @mcp.tool(name="GetPatientAllergies", description="Gets the known allergies of a patient.")
+        async def get_patient_allergies(patientId: str | None = None) -> str:  # noqa: N803
             req = get_request()
 
-            if not patient_id:
-                patient_id = get_patient_id_if_context_exists(req)
-                if not patient_id:
+            if not patientId:
+                patientId = get_patient_id_if_context_exists(req)
+                if not patientId:
                     raise ValueError("No patient context found")
 
-            bundle = await fhir_client_instance.search(req, "AllergyIntolerance", [f"patient={patient_id}"])
+            bundle = await fhir_client_instance.search(req, "AllergyIntolerance", [f"patient={patientId}"])
 
             if not bundle or not bundle.get("entry"):
                 return create_text_response("No known allergies found for this patient.")
