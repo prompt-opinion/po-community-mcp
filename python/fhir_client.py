@@ -1,13 +1,13 @@
 import httpx
-from fastapi import Request
+from mcp.server.fastmcp import Context
 
 from fhir_context import FhirContext
 from fhir_utilities import get_fhir_context
 
 
 class FhirClient:
-    def _get_fhir_context_or_throw(self, req: Request) -> FhirContext:
-        context = get_fhir_context(req)
+    def _get_fhir_context_or_throw(self, ctx: Context) -> FhirContext:
+        context = get_fhir_context(ctx)
         if not context:
             raise ValueError("The fhir context could not be retrieved")
         return context
@@ -17,8 +17,8 @@ class FhirClient:
             path = path[1:]
         return f"{context.url}/{path}"
 
-    async def _get(self, req: Request, path: str) -> dict | None:
-        context = self._get_fhir_context_or_throw(req)
+    async def _get(self, ctx: Context, path: str) -> dict | None:
+        context = self._get_fhir_context_or_throw(ctx)
         headers = {}
         if context.token:
             headers["Authorization"] = f"Bearer {context.token}"
@@ -33,12 +33,12 @@ class FhirClient:
             except httpx.HTTPStatusError:
                 raise
 
-    async def read(self, req: Request, path: str) -> dict | None:
-        return await self._get(req, path)
+    async def read(self, ctx: Context, path: str) -> dict | None:
+        return await self._get(ctx, path)
 
-    async def search(self, req: Request, resource_type: str, search_parameters: list[str]) -> dict | None:
+    async def search(self, ctx: Context, resource_type: str, search_parameters: list[str]) -> dict | None:
         query = "&".join(search_parameters)
-        return await self._get(req, f"{resource_type}?{query}")
+        return await self._get(ctx, f"{resource_type}?{query}")
 
 
 fhir_client_instance = FhirClient()

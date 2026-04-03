@@ -10,3 +10,11 @@ def _patched_get_capabilities(notification_options, experimental_capabilities):
     return caps
 
 mcp._mcp_server.get_capabilities = _patched_get_capabilities
+
+from tools.patient_age_tool import get_patient_age
+from tools.patient_allergies_tool import get_patient_allergies
+from tools.patient_id_tool import find_patient_id
+
+mcp.tool(name="GetPatientAge", description="Gets the age of a patient.")(get_patient_age)
+mcp.tool(name="GetPatientAllergies", description="Gets the known allergies of a patient.")(get_patient_allergies)
+mcp.tool(name="FindPatientId", description="Finds a patient id given a first name and last name")(find_patient_id)
