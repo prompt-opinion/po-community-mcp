@@ -25,7 +25,7 @@ async def find_patient_id(
     return create_text_response("No patient could be found with that name", is_error=True)
 
 
-async def _patient_searcher(
+async def _find_patient(
     ctx: Context,
     search_first_name: str | None,
     search_last_name: str | None,
