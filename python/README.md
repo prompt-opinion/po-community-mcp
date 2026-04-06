@@ -18,7 +18,7 @@ And then run `uvicorn main:app --reload`.
 The server will be available at `http://localhost:8000`. Test it:
 
 ```bash
-curl http://localhost:8000/hello-world
+curl -i http://localhost:8000/mcp
 ```
 
 # Running with Docker
@@ -32,7 +32,7 @@ docker compose -f docker-compose-local.yml up python --build
 The server will be available at `http://localhost:55002`. Test it:
 
 ```bash
-curl http://localhost:55002/hello-world
+curl -i http://localhost:55002/mcp
 ```
 
 To stop:

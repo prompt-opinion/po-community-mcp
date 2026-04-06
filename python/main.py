@@ -21,10 +21,4 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-@app.get("/hello-world")
-async def health():
-    return "Hello World"
-
-
 app.mount("/", mcp.streamable_http_app())

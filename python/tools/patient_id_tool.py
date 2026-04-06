@@ -3,7 +3,8 @@ from typing import Annotated
 from mcp.server.fastmcp import Context
 from pydantic import Field
 
-from fhir_client import fhir_client_instance
+from fhir_client import FhirClient
+from fhir_utilities import get_fhir_context
 from mcp_utilities import create_text_response
 
 
@@ -30,13 +31,19 @@ async def _find_patient(
     search_first_name: str | None,
     search_last_name: str | None,
 ) -> list[dict] | None:
-    search_parameters: list[str] = []
-    if search_first_name:
-        search_parameters.append(f"given={search_first_name}")
-    if search_last_name:
-        search_parameters.append(f"family={search_last_name}")
+    fhir_context = get_fhir_context(ctx)
+    if not fhir_context:
+        raise ValueError("The fhir context could not be retrieved")
 
-    bundle = await fhir_client_instance.search(ctx, "Patient", search_parameters)
+    fhir_client = FhirClient(base_url=fhir_context.url, token=fhir_context.token)
+
+    search_parameters: dict[str, str] = {}
+    if search_first_name:
+        search_parameters["given"] = search_first_name
+    if search_last_name:
+        search_parameters["family"] = search_last_name
+
+    bundle = await fhir_client.search("Patient", search_parameters)
     if not bundle or not bundle.get("entry"):
         return None
 
