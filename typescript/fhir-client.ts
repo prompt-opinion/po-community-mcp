@@ -42,7 +42,10 @@ class FhirClient {
     }
 
     try {
+      console.log(`\n>>> FHIR Request: ${config.method?.toUpperCase()} ${config.url}`);
       const response = await axios(config);
+      console.log(`<<< FHIR Response (${response.status}):`);
+      console.log(JSON.stringify(response.data, null, 2));
       return response.data as T;
     } catch (error) {
       console.error(error);

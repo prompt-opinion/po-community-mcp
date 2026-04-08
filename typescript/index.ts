@@ -17,6 +17,9 @@ switch (env) {
     break;
   default:
     allowedHosts.push("localhost");
+    if (process.env["ALLOWED_HOST"]) {
+      allowedHosts.push(process.env["ALLOWED_HOST"]);
+    }
 }
 
 const app = createMcpExpressApp({
@@ -33,6 +36,13 @@ app.get("/hello-world", async (_, res) => {
 });
 
 app.post("/mcp", async (req, res) => {
+  console.log("\n--- Incoming MCP request ---");
+  console.log("FHIR Server URL:", req.headers["x-fhir-server-url"] || "(not set)");
+  console.log("FHIR Access Token:", req.headers["x-fhir-access-token"] ? "(present)" : "(not set)");
+  console.log("Patient ID header:", req.headers["x-patient-id"] || "(not set)");
+  console.log("Body:", JSON.stringify(req.body, null, 2));
+  console.log("----------------------------\n");
+
   try {
     const server = new McpServer(
       {
