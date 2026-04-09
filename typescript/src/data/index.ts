@@ -16,5 +16,9 @@ export type { FollowUpRule } from "./follow-up-rules";
 
 export { WARNING_SIGNS } from "./warning-signs";
 
+export { ACTIVITY_RESTRICTIONS } from "./activity-restrictions";
+
+export { DIET_GUIDANCE } from "./diet-guidance";
+
 export { MED_INSTRUCTIONS, DRUG_CLASS_INSTRUCTIONS } from "./med-instructions";
 export type { MedInstruction, DrugClassInstruction } from "./med-instructions";
