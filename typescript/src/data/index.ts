@@ -20,5 +20,5 @@ export { ACTIVITY_RESTRICTIONS } from "./activity-restrictions";
 
 export { DIET_GUIDANCE } from "./diet-guidance";
 
-export { MED_INSTRUCTIONS, DRUG_CLASS_INSTRUCTIONS } from "./med-instructions";
+export { MED_INSTRUCTIONS, RXNORM_TO_DRUG_CLASS, DRUG_CLASS_INSTRUCTIONS } from "./med-instructions";
 export type { MedInstruction, DrugClassInstruction } from "./med-instructions";

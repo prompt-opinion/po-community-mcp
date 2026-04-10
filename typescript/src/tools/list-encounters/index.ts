@@ -58,9 +58,15 @@ class ListEncountersTool implements IMcpTool {
       async ({ patientId, classFilter }) => {
         const id = resolvePatientId(patientId, req);
 
+        const VALID_CLASS_CODES = new Set(Object.keys(CLASS_LABELS));
         const params: string[] = [];
         if (classFilter) {
-          params.push(`class=${classFilter}`);
+          if (!VALID_CLASS_CODES.has(classFilter)) {
+            return McpResponse.error(
+              `Invalid class code "${classFilter}". Valid codes: ${[...VALID_CLASS_CODES].join(", ")}`,
+            );
+          }
+          params.push(`class=${encodeURIComponent(classFilter)}`);
         }
         params.push("_sort=-date");
 

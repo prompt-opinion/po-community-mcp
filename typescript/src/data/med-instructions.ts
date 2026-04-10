@@ -308,6 +308,26 @@ export const MED_INSTRUCTIONS: Record<string, MedInstruction> = {
   },
 };
 
+// ── RxNorm code → drug class (bridge for class-level fallback) ───────────────
+
+export const RXNORM_TO_DRUG_CLASS: Record<string, string> = {
+  "308460": "antibiotic",    "723": "antibiotic",       "141962": "antibiotic",
+  "310026": "antibiotic",    "198333": "antibiotic",
+  "860975": "antidiabetic",  "861007": "antidiabetic",  "310489": "antidiabetic",
+  "285018": "antidiabetic",  "86009": "antidiabetic",
+  "314076": "antihypertensive", "314077": "antihypertensive",
+  "197361": "antihypertensive", "866514": "antihypertensive",
+  "200031": "antihypertensive", "203160": "antihypertensive",
+  "202991": "diuretic",      "202672": "diuretic",
+  "259255": "statin",        "617312": "statin",
+  "312961": "statin",        "301542": "statin",
+  "198440": "analgesic",     "197806": "analgesic",     "849727": "analgesic",
+  "1049502": "analgesic",    "856900": "analgesic",
+  "855332": "anticoagulant", "1364435": "anticoagulant", "1114195": "anticoagulant",
+  "745679": "bronchodilator", "896458": "bronchodilator", "896766": "bronchodilator",
+  "312615": "corticosteroid",
+};
+
 // ── Drug class → generic purpose (fallback when specific RxNorm not found) ───
 
 export interface DrugClassInstruction {

@@ -1,4 +1,4 @@
-import { differenceInDays, differenceInYears, format } from "date-fns";
+import { differenceInDays, differenceInYears, format, isValid, parseISO } from "date-fns";
 import { fhirR4 } from "@smile-cdr/fhirts";
 import {
   DischargeInstructionsInput,
@@ -9,14 +9,18 @@ import {
 import {
   ACTIVITY_RESTRICTIONS,
   DIET_GUIDANCE,
+  DRUG_CLASS_INSTRUCTIONS,
   MED_INSTRUCTIONS,
+  RXNORM_TO_DRUG_CLASS,
   WARNING_SIGNS,
 } from "../../data";
 
 // ── Private helpers ───────────────────────────────────────────────────────────
 
-function toDate(value: string | Date): Date {
-  return value instanceof Date ? value : new Date(value);
+function toDate(value: string | Date): Date | null {
+  if (value instanceof Date) return isValid(value) ? value : null;
+  const parsed = parseISO(value);
+  return isValid(parsed) ? parsed : null;
 }
 
 function formatPatientName(patient: fhirR4.Patient): string {
@@ -46,12 +50,11 @@ function buildVisitSummary(
   level: ReadingLevel,
 ): string {
   const name = formatPatientName(patient);
-  const age = patient.birthDate
-    ? differenceInYears(new Date(), toDate(patient.birthDate))
-    : null;
+  const birthDate = patient.birthDate ? toDate(patient.birthDate) : null;
+  const age = birthDate ? differenceInYears(new Date(), birthDate) : null;
 
   const admitDate = encounter.period?.start ? toDate(encounter.period.start) : null;
-  const dischargeDate = encounter.period?.end ? toDate(encounter.period.end) : new Date();
+  const dischargeDate = (encounter.period?.end ? toDate(encounter.period.end) : null) ?? new Date();
   const los = admitDate ? differenceInDays(dischargeDate, admitDate) : null;
 
   const conditionNames = conditions
@@ -122,11 +125,18 @@ function buildMedicationInstructions(
       "Unknown medication";
 
     const instruction = rxNormCode ? MED_INSTRUCTIONS[rxNormCode] : undefined;
-    const purpose = instruction?.purpose ?? "As directed by your doctor";
-    const notes =
-      level === "simple"
-        ? (instruction?.simpleNotes ?? instruction?.notes ?? "Ask your pharmacist if you have questions about this medication.")
-        : (instruction?.notes ?? "Ask your pharmacist if you have questions about this medication.");
+    const drugClass = !instruction && rxNormCode ? RXNORM_TO_DRUG_CLASS[rxNormCode] : undefined;
+    const classInstruction = drugClass ? DRUG_CLASS_INSTRUCTIONS[drugClass] : undefined;
+
+    const purpose = instruction?.purpose
+      ?? classInstruction?.purposeTemplate
+      ?? "As directed by your doctor";
+    const defaultNotes = "Ask your pharmacist if you have questions about this medication.";
+    const notes = instruction
+      ? (level === "simple"
+          ? (instruction.simpleNotes ?? instruction.notes ?? defaultNotes)
+          : (instruction.notes ?? defaultNotes))
+      : (classInstruction?.notes ?? defaultNotes);
 
     const dosageInstruction = req.dosageInstruction?.[0];
     const doseQuantity = dosageInstruction?.doseAndRate?.[0]?.doseQuantity;
@@ -164,7 +174,10 @@ function buildWarningSigns(conditions: fhirR4.Condition[]): string[] {
     }
   };
 
-  if (codes.length === 0) return (addLines(defaultSigns), lines);
+  if (codes.length === 0) {
+    addLines(defaultSigns);
+    return lines;
+  }
 
   for (const code of codes) {
     addLines(WARNING_SIGNS[code] ?? defaultSigns);
@@ -207,7 +220,15 @@ function buildDietGuidance(conditions: fhirR4.Condition[]): string {
 export function generateDischargeInstructions(
   input: DischargeInstructionsInput,
 ): DischargeInstructionsResult {
-  const { readingLevel, patient, encounter, conditions, procedures, medicationRequests } = input;
+  const { readingLevel, patient, encounter, procedures } = input;
+
+  const conditions = input.conditions.filter((c) =>
+    c.clinicalStatus?.coding?.some((coding) => coding.code === "active"),
+  );
+  const medicationRequests = input.medicationRequests.filter(
+    (m) => m.status === "active",
+  );
+
   return {
     visitSummary: buildVisitSummary(patient, encounter, conditions, procedures, readingLevel),
     medications: buildMedicationInstructions(medicationRequests, readingLevel),
