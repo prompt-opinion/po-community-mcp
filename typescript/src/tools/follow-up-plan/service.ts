@@ -63,14 +63,6 @@ function isCoveredByCarePlan(item: FollowUpItem, coverage: Set<string>): boolean
 
 // ── Abbreviation expansion (patient-facing output) ──────────────────────────
 
-const ABBR_PATTERN = new RegExp(
-  Object.keys(MEDICAL_ABBREVIATIONS)
-    .map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-    .join("|")
-    .replace(/\|/g, "\\b|\\b"),
-  "g",
-);
-
 function expandText(text: string): string {
   return text.replace(
     new RegExp(`\\b(${Object.keys(MEDICAL_ABBREVIATIONS).map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`, "g"),
