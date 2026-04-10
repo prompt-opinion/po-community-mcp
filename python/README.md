@@ -2,9 +2,16 @@
 
 Create and activate a virtual environment first:
 
+On macOS/Linux:
 ```bash
 python3 -m venv venv
 source venv/bin/activate
+```
+
+On Windows:
+```bash
+python -m venv venv
+venv\Scripts\activate
 ```
 
 Then install dependencies:
