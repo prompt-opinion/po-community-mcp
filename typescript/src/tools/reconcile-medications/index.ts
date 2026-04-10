@@ -10,6 +10,7 @@ import {
   getAllergyIntolerances,
 } from "../../fhir/queries";
 import { reconcileMedications } from "./service";
+import { logger } from "../../logger";
 
 class ReconcileMedicationsTool implements IMcpTool {
   registerTool(server: McpServer, req: Request) {
@@ -17,12 +18,13 @@ class ReconcileMedicationsTool implements IMcpTool {
       "ReconcileMedications",
       {
         description:
-          "Compares pre-admission vs discharge medications. Flags new, stopped, changed, and continued. Checks interactions and allergy conflicts.",
+          "Compares pre-admission medications with current active medications at discharge. " +
+          "Identifies new, stopped, and changed medications, and checks for drug interactions and allergy conflicts.",
         inputSchema: {
           patientId: z
             .string()
             .describe(
-              "The patient ID. Optional if patient context exists.",
+              "FHIR Patient ID. If omitted, resolved from SHARP context.",
             )
             .optional(),
         },
@@ -37,7 +39,7 @@ class ReconcileMedicationsTool implements IMcpTool {
               "_sort=-date",
               "_count=1",
             ]),
-            getMedicationRequests(req, id),
+            getMedicationRequests(req, id, ["_sort=-date", "_count=100"]),
             getAllergyIntolerances(req, id),
           ]);
 
@@ -46,13 +48,19 @@ class ReconcileMedicationsTool implements IMcpTool {
           return McpResponse.error("No inpatient encounter found.");
         }
 
-        const result = reconcileMedications({
-          encounter,
-          medicationRequests,
-          allergyIntolerances,
-        });
-
-        return McpResponse.json(result);
+        try {
+          const result = reconcileMedications({
+            encounter,
+            medicationRequests,
+            allergyIntolerances,
+          });
+          return McpResponse.json(result);
+        } catch (err) {
+          const message =
+            err instanceof Error ? err.message : "Unexpected error";
+          logger.error("ReconcileMedications service error", { error: message });
+          return McpResponse.error(message);
+        }
       },
     );
   }

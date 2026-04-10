@@ -1,3 +1,6 @@
+export { DRUG_INTERACTIONS } from "./drug-interactions";
+export type { DrugInteraction } from "./drug-interactions";
+
 export { CHARLSON_CONDITIONS } from "./charlson-mapping";
 export type { CharlsonCondition } from "./charlson-mapping";
 
