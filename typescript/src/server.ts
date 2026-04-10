@@ -8,8 +8,7 @@ import * as tools from "./tools";
 import { IMcpTool } from "./mcp/tool.interface";
 
 export function createServer(config: Config) {
-  const allowedHosts =
-    config.PO_ENV === "local" ? undefined : getAllowedHosts(config);
+  const allowedHosts = getAllowedHosts(config);
 
   const app = createMcpExpressApp({
     host: "0.0.0.0",

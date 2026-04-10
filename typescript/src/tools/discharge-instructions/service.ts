@@ -64,8 +64,14 @@ function buildVisitSummary(
   if (level === "simple") {
     const parts = [`${name} was in the hospital`];
     if (los !== null) parts.push(`for ${los} day${los !== 1 ? "s" : ""}`);
-    if (conditionNames.length > 0) parts.push(`for ${conditionNames[0]}`);
-    return parts.join(" ") + ". You are now ready to go home.";
+    if (conditionNames.length === 1) {
+      parts.push(`for ${conditionNames[0]}`);
+    } else if (conditionNames.length > 1) {
+      const last = conditionNames[conditionNames.length - 1];
+      const rest = conditionNames.slice(0, -1);
+      parts.push(`for ${rest.join(", ")} and ${last}`);
+    }
+    return parts.join(" ") + ".";
   }
 
   if (level === "standard") {
