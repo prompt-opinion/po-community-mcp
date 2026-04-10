@@ -1,5 +1,6 @@
 export { patientAgeTool } from "./patient-age";
 export { patientIdTool } from "./patient-id";
+export { listEncountersTool } from "./list-encounters";
 export { reconcileMedicationsTool } from "./reconcile-medications";
 export { dischargeInstructionsTool } from "./discharge-instructions";
 export { readmissionRiskTool } from "./readmission-risk";

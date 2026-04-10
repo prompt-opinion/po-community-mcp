@@ -44,9 +44,10 @@ class DischargeInstructionsTool implements IMcpTool {
               "_sort=-date",
               "_count=1",
             ]),
-            getConditions(req, id),
+
+            getConditions(req, id, ["clinical-status=active"]),
             getProcedures(req, id),
-            getMedicationRequests(req, id),
+            getMedicationRequests(req, id, ["status=active"]),
           ]);
 
         if (!patient) {

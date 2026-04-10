@@ -14,8 +14,11 @@ export {
 } from "./follow-up-rules";
 export type { FollowUpRule } from "./follow-up-rules";
 
-export { MED_INSTRUCTION_TEMPLATES } from "./med-instructions";
-export type { MedInstructionTemplate } from "./med-instructions";
+export { WARNING_SIGNS } from "./warning-signs";
 
-export { CONDITION_WARNING_SIGNS } from "./warning-signs";
-export type { WarningSignEntry } from "./warning-signs";
+export { ACTIVITY_RESTRICTIONS } from "./activity-restrictions";
+
+export { DIET_GUIDANCE } from "./diet-guidance";
+
+export { MED_INSTRUCTIONS, RXNORM_TO_DRUG_CLASS, DRUG_CLASS_INSTRUCTIONS } from "./med-instructions";
+export type { MedInstruction, DrugClassInstruction } from "./med-instructions";
