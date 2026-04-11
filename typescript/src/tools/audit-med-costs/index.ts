@@ -30,7 +30,7 @@ class AuditMedCostsTool implements IMcpTool {
         const id = resolvePatientId(patientId, req);
 
         const [medicationRequests, allergyIntolerances] = await Promise.all([
-          getMedicationRequests(req, id, ["status=active"]),
+          getMedicationRequests(req, id),
           getAllergyIntolerances(req, id),
         ]);
 
