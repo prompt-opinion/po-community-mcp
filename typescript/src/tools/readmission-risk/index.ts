@@ -26,27 +26,22 @@ class ReadmissionRiskTool implements IMcpTool {
       async ({ patientId }) => {
         const id = resolvePatientId(patientId, req);
 
-        const [inpatientEncounters, allEncounters, conditions] =
-          await Promise.all([
-            getEncounters(req, id, [
-              "class=IMP",
-              "_sort=-date",
-              "_count=1",
-            ]),
-            getEncounters(req, id),
-            getConditions(req, id),
-          ]);
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+        const sixMonthsAgoStr = sixMonthsAgo.toISOString().split("T")[0];
+
+        const [inpatientEncounters, erEncounters, conditions] = await Promise.all([
+          getEncounters(req, id, ["class=IMP", "_sort=-date", "_count=1"]),
+          getEncounters(req, id, ["class=EMER", `date=ge${sixMonthsAgoStr}`]),
+          getConditions(req, id, ["clinical-status=active"]),
+        ]);
 
         const encounter = inpatientEncounters[0];
         if (!encounter) {
           return McpResponse.error("No inpatient encounter found.");
         }
 
-        const result = assessReadmissionRisk({
-          encounter,
-          allEncounters,
-          conditions,
-        });
+        const result = assessReadmissionRisk({ encounter, erEncounters, conditions });
 
         return McpResponse.json(result);
       },

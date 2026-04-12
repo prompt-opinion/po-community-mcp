@@ -18,6 +18,6 @@ export interface ReadmissionRiskResult {
 
 export interface ReadmissionRiskInput {
   encounter: fhirR4.Encounter;
-  allEncounters: fhirR4.Encounter[];
+  erEncounters: fhirR4.Encounter[];
   conditions: fhirR4.Condition[];
 }
