@@ -42,7 +42,23 @@ app.post("/mcp", async (req, res) => {
       {
         capabilities: {
           extensions: {
-            "ai.promptopinion/fhir-context": {},
+            "ai.promptopinion/fhir-context": {
+              scopes: [
+                {
+                  name: "patient/Patient.rs",
+                  required: true,
+                },
+                {
+                  name: "patient/Observation.rs",
+                },
+                {
+                  name: "patient/MedicationStatement.rs",
+                },
+                {
+                  name: "patient/Condition.rs",
+                },
+              ],
+            },
           },
         },
       },
