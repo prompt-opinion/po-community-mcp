@@ -1,5 +1,6 @@
 import { fhirR4 } from "@smile-cdr/fhirts";
 import { DRUG_INTERACTIONS } from "../../data/drug-interactions";
+import { MEDICAL_ABBREVIATIONS } from "../../data/medical-abbreviations";
 import {
   ReconcileMedicationsInput,
   ReconcileMedicationsOutput,
@@ -12,6 +13,21 @@ import {
 } from "./types";
 
 const RXNORM_SYSTEM = "http://www.nlm.nih.gov/research/umls/rxnorm";
+
+const ABBREVIATION_REGEX = new RegExp(
+  `\\b(${Object.keys(MEDICAL_ABBREVIATIONS)
+    .map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|")})\\b`,
+  "g",
+);
+
+function expandText(text: string): string {
+  ABBREVIATION_REGEX.lastIndex = 0;
+  return text.replace(
+    ABBREVIATION_REGEX,
+    (match) => MEDICAL_ABBREVIATIONS[match] ?? match,
+  );
+}
 
 function toDateString(value: string | Date | undefined): string | undefined {
   if (value === undefined) return undefined;
@@ -125,11 +141,12 @@ export function reconcileMedications(
     if (!isActive(med)) continue;
 
     if (!preMed) {
+      const dosage = extractDosage(med);
       newMeds.push({
         medication: extractDisplayName(med),
         rxnorm,
         startedOn: toDateOnly(med.authoredOn),
-        dosage: extractDosage(med),
+        dosage: dosage ? expandText(dosage) : undefined,
       });
     } else {
       const prevDosage = extractDosage(preMed);
@@ -138,8 +155,8 @@ export function reconcileMedications(
         changedMeds.push({
           medication: extractDisplayName(med),
           rxnorm,
-          previousDosage: prevDosage ?? "",
-          newDosage: newDosage ?? "",
+          previousDosage: prevDosage ? expandText(prevDosage) : "",
+          newDosage: newDosage ? expandText(newDosage) : "",
           changedOn: toDateOnly(med.authoredOn),
         });
         changedRxNorms.add(rxnorm);

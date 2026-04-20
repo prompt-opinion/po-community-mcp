@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { loadConfig } from "./config";
 import { logger } from "./logger";
 import { createServer } from "./server";

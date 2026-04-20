@@ -24,4 +24,24 @@ export const MEDICAL_ABBREVIATIONS: Record<string, string> = {
 
   // ── Procedure shorthands ──────────────────────────────────────────────────
   cath: "catheterization",
+
+  // ── Dosing frequency ──────────────────────────────────────────────────────
+  BID: "twice daily (BID)",
+  TID: "three times daily (TID)",
+  QID: "four times daily (QID)",
+  QD: "once daily",
+  QDay: "once daily",
+  PRN: "as needed (PRN)",
+  HS: "at bedtime (HS)",
+  AC: "before meals (AC)",
+  PC: "after meals (PC)",
+  STAT: "immediately",
+  NPO: "nothing by mouth (NPO)",
+
+  // ── Route of administration ───────────────────────────────────────────────
+  PO: "by mouth (PO)",
+  IV: "intravenously (IV)",
+  SQ: "under the skin (subcutaneous)",
+  SC: "under the skin (subcutaneous)",
+  IM: "into the muscle (intramuscular)",
 };
