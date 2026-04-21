@@ -49,6 +49,9 @@ app.post("/mcp", async (req, res) => {
                   required: true,
                 },
                 {
+                  name: "offline_access",
+                },
+                {
                   name: "patient/Observation.rs",
                 },
                 {
