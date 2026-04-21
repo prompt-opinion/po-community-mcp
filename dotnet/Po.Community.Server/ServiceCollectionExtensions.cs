@@ -26,6 +26,7 @@ public static class ServiceCollectionExtensions
                     Scopes =
                     [
                         new FhirContextExtensionModelScope("patient/Patient.rs", required: true),
+                        new FhirContextExtensionModelScope("offline_access"),
                         new FhirContextExtensionModelScope("patient/Observation.rs"),
                         new FhirContextExtensionModelScope("patient/MedicationStatement.rs"),
                         new FhirContextExtensionModelScope("patient/Condition.rs"),
