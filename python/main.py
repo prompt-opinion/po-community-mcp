@@ -1,9 +1,13 @@
 from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from mcp_instance import mcp
+# Load .env (Twilio creds, etc.) before importing tools that read os.environ.
+load_dotenv()
+
+from mcp_instance import mcp  # noqa: E402
 
 
 @asynccontextmanager

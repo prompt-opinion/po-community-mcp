@@ -3,3 +3,5 @@ uvicorn>=0.32.0
 mcp>=1.9.0
 httpx>=0.28.0
 PyJWT>=2.10.0
+twilio>=9.0.0
+python-dotenv>=1.0.0

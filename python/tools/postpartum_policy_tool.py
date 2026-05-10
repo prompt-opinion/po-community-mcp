@@ -19,9 +19,11 @@ State detection:
 import base64
 import json
 import re
+import traceback
 from datetime import date, timedelta
 from typing import Annotated
 
+import httpx
 from mcp.server.fastmcp import Context
 from pydantic import Field
 
@@ -67,6 +69,46 @@ _DELIVERY_KEYWORDS = [
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
+async def _safe_search(
+    client: FhirClient,
+    resource_type: str,
+    params: dict[str, str],
+    diagnostics: list[str],
+) -> dict | None:
+    """
+    Run a FHIR search and never raise. On HTTP / network errors, append a
+    one-line diagnostic and return None so the caller can fall through.
+    Diagnostics are surfaced in the final error message if nothing else works.
+    """
+    try:
+        bundle = await client.search(resource_type, params)
+        if bundle is None:
+            diagnostics.append(f"{resource_type} search ({params}) → 404 / no bundle")
+            return None
+        entries = bundle.get("entry") or []
+        diagnostics.append(f"{resource_type} search ({params}) → {len(entries)} entries")
+        return bundle
+    except httpx.HTTPStatusError as e:
+        status = e.response.status_code if e.response is not None else "?"
+        body = ""
+        if e.response is not None:
+            try:
+                body = e.response.text[:200]
+            except Exception:
+                pass
+        diagnostics.append(
+            f"{resource_type} search ({params}) → HTTP {status}"
+            + (f": {body}" if body else "")
+        )
+        return None
+    except httpx.HTTPError as e:
+        diagnostics.append(f"{resource_type} search ({params}) → network error: {e}")
+        return None
+    except Exception as e:  # noqa: BLE001
+        diagnostics.append(f"{resource_type} search ({params}) → unexpected: {type(e).__name__}: {e}")
+        return None
+
+
 def _extract_delivery_date_from_text(text: str) -> date | None:
     """
     Attempt to extract a delivery date from unstructured clinical text.
@@ -95,8 +137,11 @@ def _extract_delivery_date_from_text(text: str) -> date | None:
                         month, day, year = int(g0), int(g1), int(g2)
 
                     candidate = date(year, month, day)
-                    # Only consider plausible delivery dates (within last 5 years)
-                    if date(2020, 1, 1) <= candidate <= date.today():
+                    # Plausible delivery range: 2020-01-01 through 1y in the future.
+                    # (A small forward buffer avoids silently dropping valid dates
+                    # when a clinical note is written ahead of the local clock.)
+                    upper_bound = date.today() + timedelta(days=365)
+                    if date(2020, 1, 1) <= candidate <= upper_bound:
                         # Score: count delivery keywords within 100 chars of match
                         window_start = max(0, match.start() - 100)
                         window_end = min(len(text_lower), match.end() + 100)
@@ -194,24 +239,45 @@ def _parse_delivery_date_from_condition(condition_bundle: dict) -> date | None:
 
 def _build_sms_draft(patient_name: str, phone: str, days: int,
                      cliff_date: date, policy: dict) -> dict:
-    state_name = policy["name"]
-    agency_phone = policy["phone"]
-    website = policy["website"]
-    urgency = "URGENT: " if days <= 7 else ""
+    """
+    Build the patient-facing SMS body.
 
-    message = (
-        f"{urgency}Hi {patient_name.split()[0]}, your Medicaid coverage expires in "
-        f"{days} day{'s' if days != 1 else ''} on {cliff_date.strftime('%B %d, %Y')}. "
+    Constraints (Twilio trial accounts):
+      - Twilio prepends ~39 chars ("Sent from your Twilio trial account - ").
+      - Total delivered message must fit one GSM-7 SMS segment (160 chars), or
+        Twilio rejects with error 30044 ("Trial Message Length Exceeded").
+      - GSM-7 disallows fancy punctuation (em-dash, curly quotes); using any
+        forces UCS-2 encoding (70-char segments), which trips 30044 faster.
+    Target body length: <= ~120 chars, ASCII only.
+    """
+    first_name = patient_name.split()[0]
+    agency_phone = policy["phone"]
+    # Strip URL scheme + trailing slash to save chars.
+    website = (
+        policy["website"]
+        .replace("https://", "")
+        .replace("http://", "")
+        .rstrip("/")
     )
+    # "5/19" — Linux strftime; the server is Linux-only.
+    cliff_short = cliff_date.strftime("%-m/%-d")
+
+    if days > 0:
+        urgency = "URGENT: " if days <= 7 else ""
+        timing = f"Medicaid ends in {days}d ({cliff_short})"
+    else:
+        urgency = "URGENT: "
+        timing = f"Medicaid ENDED {cliff_short}"
+
     if policy["arpa"]:
-        message += (
-            f"You may qualify for a FREE 12-month extension through {state_name} Medicaid. "
-            f"Call {agency_phone} or visit {website} TODAY — do not wait."
+        message = (
+            f"{urgency}{first_name}, {timing}. "
+            f"Free 12-mo extension: {agency_phone} or {website}."
         )
     else:
-        message += (
-            f"{state_name} Medicaid ends at 60 days postpartum. Call {agency_phone} "
-            f"immediately for alternative coverage options."
+        message = (
+            f"{urgency}{first_name}, {timing}. "
+            f"Call {agency_phone} now for coverage options."
         )
 
     return {"to": phone, "message": message, "character_count": len(message)}
@@ -295,7 +361,274 @@ def _build_ob_flag(delivery_date: date) -> dict:
     }
 
 
-# ── Main Tool Function ────────────────────────────────────────────────────────
+# ── Core analysis (shared between Analyze + Dispatch tools) ──────────────────
+
+async def compute_postpartum_analysis(
+    patientId: str | None,
+    ctx: Context | None,
+) -> dict | str:
+    """
+    Run the postpartum coverage analysis end-to-end.
+
+    Returns the full result dict on success (under key ``trajectory_os_analysis``)
+    or an error string beginning with ``ERROR:`` on failure. Shared by both the
+    AnalyzePostpartumCoverage tool (which serializes the dict to JSON) and the
+    DispatchPostpartumAlert tool (which acts on the CRITICAL payload by sending
+    a real SMS).
+    """
+    diagnostics: list[str] = []
+    try:
+        # ── 1. Resolve patient ID ─────────────────────────────────────────────
+        if not patientId:
+            patientId = get_patient_id_if_context_exists(ctx)
+        if not patientId:
+            return (
+                "ERROR: No patient ID was provided and no patient context could be found "
+                "in the SHARP headers (x-patient-id, or `patient` claim in the FHIR token). "
+                "Pass patientId explicitly or ensure the Prompt Opinion session has a "
+                "patient context attached."
+            )
+
+        # ── 2. Build FHIR client ──────────────────────────────────────────────
+        fhir_context = get_fhir_context(ctx)
+        if not fhir_context:
+            return (
+                "ERROR: FHIR context (x-fhir-server-url header) could not be retrieved. "
+                "The MCP server expects Prompt Opinion to inject SHARP headers on every "
+                "tool call."
+            )
+
+        client = FhirClient(base_url=fhir_context.url, token=fhir_context.token)
+
+        # ── 3. Fetch Patient ──────────────────────────────────────────────────
+        try:
+            patient = await client.read(f"Patient/{patientId}")
+        except httpx.HTTPStatusError as e:
+            status = e.response.status_code if e.response is not None else "?"
+            body = e.response.text[:300] if e.response is not None else ""
+            return (
+                f"ERROR: FHIR Patient/{patientId} read failed with HTTP {status}. "
+                f"Server response: {body}. "
+                "Likely the access token is missing the patient/Patient.rs scope or has "
+                "expired — re-authorize the MCP server in Prompt Opinion."
+            )
+        if not patient:
+            return (
+                f"ERROR: Patient '{patientId}' not found on the FHIR server "
+                f"({fhir_context.url})."
+            )
+
+        name_entry = patient.get("name", [{}])[0]
+        first_name = (name_entry.get("given") or ["Unknown"])[0]
+        last_name = name_entry.get("family", "Unknown")
+        patient_name = f"{first_name} {last_name}".strip()
+        phone = (patient.get("telecom") or [{}])[0].get("value", "N/A")
+
+        # ── 4. Detect state ───────────────────────────────────────────────────
+        state_code = _detect_state_from_patient(patient)
+        state_source = "Patient.address"
+
+        # ── 5. Fetch Condition (primary delivery date source) ─────────────────
+        # Try system-qualified token search first (FHIR-spec strict), then
+        # bare-code fallback (lenient servers).
+        delivery_date: date | None = None
+        data_sources_used: list[str] = []
+
+        condition_bundle = await _safe_search(
+            client,
+            "Condition",
+            {"patient": patientId, "code": f"http://snomed.info/sct|{LIVEBIRTH_SNOMED}"},
+            diagnostics,
+        )
+        if not (condition_bundle and condition_bundle.get("entry")):
+            condition_bundle = await _safe_search(
+                client,
+                "Condition",
+                {"patient": patientId, "code": LIVEBIRTH_SNOMED},
+                diagnostics,
+            )
+
+        if condition_bundle:
+            delivery_date = _parse_delivery_date_from_condition(condition_bundle)
+            if delivery_date:
+                data_sources_used.append("Condition/Livebirth (onsetDateTime)")
+
+        # ── 6. Fetch DocumentReference (secondary delivery date source) ───────
+        if not delivery_date:
+            doc_bundle = await _safe_search(
+                client,
+                "DocumentReference",
+                {"patient": patientId, "type": f"http://loinc.org|{DISCHARGE_SUMMARY_LOINC}"},
+                diagnostics,
+            )
+            if doc_bundle:
+                delivery_date = _parse_document_reference_date(doc_bundle)
+                if delivery_date:
+                    data_sources_used.append(
+                        "DocumentReference/DischargeSummary (text extraction)"
+                    )
+
+        # Fallback: try ALL DocumentReferences if typed search returned nothing
+        if not delivery_date:
+            doc_bundle_all = await _safe_search(
+                client,
+                "DocumentReference",
+                {"patient": patientId},
+                diagnostics,
+            )
+            if doc_bundle_all:
+                delivery_date = _parse_document_reference_date(doc_bundle_all)
+                if delivery_date:
+                    data_sources_used.append(
+                        "DocumentReference/Any (text extraction — fallback)"
+                    )
+
+        if not delivery_date:
+            return (
+                "ERROR: Could not determine a delivery date for patient "
+                f"'{patientId}'. The tool tried Condition (SNOMED 281050002) and "
+                "DocumentReference (LOINC 18842-5, then any type) and none yielded "
+                "a date.\n\nFHIR search diagnostics:\n  - "
+                + "\n  - ".join(diagnostics)
+                + "\n\nIf the searches above show HTTP 401/403, the MCP token is "
+                "missing the patient/Condition.rs or patient/DocumentReference.rs "
+                "scope — re-authorize the MCP server in Prompt Opinion so the new "
+                "scopes declared in mcp_instance.py are granted to the token."
+            )
+
+        # ── 7. Fetch Coverage (confirm Medicaid + state fallback) ─────────────
+        coverage_bundle = await _safe_search(
+            client, "Coverage", {"patient": patientId}, diagnostics
+        )
+        if coverage_bundle:
+            data_sources_used.append("Coverage/Medicaid (payor confirmation)")
+            if not state_code:
+                state_code = _detect_state_from_coverage(coverage_bundle)
+                if state_code:
+                    state_source = "Coverage.payor (text match)"
+
+        data_sources_used.insert(0, "Patient/Demographics")
+
+        # ── 8. Calculate cliff and urgency ────────────────────────────────────
+        coverage_cliff = delivery_date + timedelta(days=STANDARD_CLIFF_DAYS)
+        today = date.today()
+        days_until_cliff = (coverage_cliff - today).days
+
+        # ── 9. Look up state policy ───────────────────────────────────────────
+        policy = get_state_policy(state_code or "")
+        extended_end = delivery_date + timedelta(days=policy["months"] * 30)
+
+        # ── 10. Build response ────────────────────────────────────────────────
+        patient_block = {
+            "name": patient_name,
+            "fhir_id": patientId,
+            "phone": phone,
+            "state": state_code or "UNKNOWN",
+            "state_source": state_source,
+            "delivery_date": delivery_date.isoformat(),
+            "standard_coverage_cliff_date": coverage_cliff.isoformat(),
+            "days_until_cliff": days_until_cliff,
+        }
+
+        state_policy_block = {
+            "state_code": state_code or "UNKNOWN",
+            "state_name": policy["name"],
+            "arpa_12_month_extension_available": policy["arpa"],
+            "extension_months": policy["months"],
+            "extended_coverage_end_if_approved": extended_end.isoformat(),
+            "agency_name": policy["agency"],
+            "agency_phone": policy["phone"],
+            "agency_website": policy["website"],
+            "agency_fax": policy["fax"],
+            "extension_form": policy["form"],
+            "form_number": policy["form_number"],
+            "policy_notes": policy["notes"],
+        }
+
+        if days_until_cliff > CRITICAL_THRESHOLD_DAYS:
+            # ── ROUTINE ───────────────────────────────────────────────────────
+            result = {
+                "trajectory_os_analysis": {
+                    "status": "ROUTINE",
+                    "summary": (
+                        f"{patient_name}'s Medicaid coverage cliff is {days_until_cliff} days away "
+                        f"({coverage_cliff.isoformat()}). No immediate action required."
+                    ),
+                    "patient": patient_block,
+                    "state_policy": state_policy_block,
+                    "monitoring": {
+                        "action_required": False,
+                        "next_review_recommended": (
+                            coverage_cliff - timedelta(days=CRITICAL_THRESHOLD_DAYS)
+                        ).isoformat(),
+                        "note": (
+                            f"Re-run analysis when {CRITICAL_THRESHOLD_DAYS} or fewer days remain. "
+                            "Zero-Click interventions will activate automatically at that threshold."
+                        ),
+                    },
+                    "data_sources_used": data_sources_used,
+                }
+            }
+        else:
+            # ── CRITICAL ──────────────────────────────────────────────────────
+            overdue_or_imminent = days_until_cliff <= 0
+            status_label = "EXPIRED" if overdue_or_imminent else "CRITICAL"
+            alert_msg = (
+                f"⚠️ MEDICAID COVERAGE {'HAS EXPIRED' if overdue_or_imminent else 'CLIFF IMMINENT'} — "
+                f"{patient_name} — "
+                f"{'Coverage ended' if overdue_or_imminent else f'{days_until_cliff} day(s) remaining'}"
+            )
+
+            if policy["arpa"]:
+                summary = (
+                    f"{patient_name}'s standard Medicaid coverage "
+                    f"{'expired' if overdue_or_imminent else f'expires in {days_until_cliff} day(s)'} "
+                    f"on {coverage_cliff.isoformat()}. "
+                    f"{policy['name']} offers a {policy['months']}-month ARPA extension — apply immediately."
+                )
+            else:
+                summary = (
+                    f"{patient_name}'s standard Medicaid coverage "
+                    f"{'expired' if overdue_or_imminent else f'expires in {days_until_cliff} day(s)'} "
+                    f"on {coverage_cliff.isoformat()}. "
+                    f"{policy['name']} has NOT adopted the ARPA 12-month extension. Escalate immediately."
+                )
+
+            result = {
+                "trajectory_os_analysis": {
+                    "status": status_label,
+                    "alert": alert_msg,
+                    "summary": summary,
+                    "patient": patient_block,
+                    "state_policy": state_policy_block,
+                    "zero_click_interventions": {
+                        "sms_draft": _build_sms_draft(
+                            patient_name, phone, days_until_cliff, coverage_cliff, policy
+                        ),
+                        "extension_form_prefilled": _build_extension_form(
+                            patient, patientId, delivery_date, coverage_cliff, policy
+                        ),
+                        "ob_appointment_flag": _build_ob_flag(delivery_date),
+                    },
+                    "data_sources_used": data_sources_used,
+                }
+            }
+
+        return result
+
+    except Exception as e:  # noqa: BLE001
+        # Catch-all so the agent always receives a readable error string instead
+        # of a generic FastMCP error envelope.
+        return (
+            f"ERROR: AnalyzePostpartumCoverage crashed unexpectedly: "
+            f"{type(e).__name__}: {e}\n\n"
+            f"FHIR search diagnostics so far:\n  - "
+            + ("\n  - ".join(diagnostics) if diagnostics else "(none)")
+            + f"\n\nTraceback:\n{traceback.format_exc()}"
+        )
+
+
+# ── Tool function: AnalyzePostpartumCoverage ─────────────────────────────────
 
 async def analyze_postpartum_coverage(
     patientId: Annotated[  # noqa: N803
@@ -322,178 +655,7 @@ async def analyze_postpartum_coverage(
     Requires: Patient, Condition (Livebirth), DocumentReference (Discharge Summary),
     and Coverage FHIR resources.
     """
-    # ── 1. Resolve patient ID ─────────────────────────────────────────────────
-    if not patientId:
-        patientId = get_patient_id_if_context_exists(ctx)
-    if not patientId:
-        raise ValueError("No patient ID provided and no patient context found in SHARP headers.")
-
-    # ── 2. Build FHIR client ──────────────────────────────────────────────────
-    fhir_context = get_fhir_context(ctx)
-    if not fhir_context:
-        raise ValueError("FHIR context (server URL) could not be retrieved from SHARP headers.")
-
-    client = FhirClient(base_url=fhir_context.url, token=fhir_context.token)
-
-    # ── 3. Fetch Patient ──────────────────────────────────────────────────────
-    patient = await client.read(f"Patient/{patientId}")
-    if not patient:
-        raise ValueError(f"Patient '{patientId}' not found on FHIR server.")
-
-    name_entry = patient.get("name", [{}])[0]
-    first_name = (name_entry.get("given") or ["Unknown"])[0]
-    last_name = name_entry.get("family", "Unknown")
-    patient_name = f"{first_name} {last_name}".strip()
-    phone = (patient.get("telecom") or [{}])[0].get("value", "N/A")
-
-    # ── 4. Detect state ───────────────────────────────────────────────────────
-    state_code = _detect_state_from_patient(patient)
-    state_source = "Patient.address"
-
-    # ── 5. Fetch Condition (primary delivery date source) ─────────────────────
-    condition_bundle = await client.search(
-        "Condition",
-        {"patient": patientId, "code": LIVEBIRTH_SNOMED},
-    )
-    delivery_date: date | None = None
-    data_sources_used: list[str] = []
-
-    if condition_bundle:
-        delivery_date = _parse_delivery_date_from_condition(condition_bundle)
-        if delivery_date:
-            data_sources_used.append("Condition/Livebirth (onsetDateTime)")
-
-    # ── 6. Fetch DocumentReference (secondary delivery date source) ───────────
-    doc_bundle = await client.search(
-        "DocumentReference",
-        {"patient": patientId, "type": f"http://loinc.org|{DISCHARGE_SUMMARY_LOINC}"},
-    )
-    if not delivery_date and doc_bundle:
-        delivery_date = _parse_document_reference_date(doc_bundle)
-        if delivery_date:
-            data_sources_used.append("DocumentReference/DischargeSummary (text extraction)")
-
-    # Fallback: try ALL DocumentReferences if typed search returned nothing
-    if not delivery_date:
-        doc_bundle_all = await client.search("DocumentReference", {"patient": patientId})
-        if doc_bundle_all:
-            delivery_date = _parse_document_reference_date(doc_bundle_all)
-            if delivery_date:
-                data_sources_used.append("DocumentReference/Any (text extraction — fallback)")
-
-    if not delivery_date:
-        raise ValueError(
-            f"Could not determine a delivery date for patient '{patientId}' from any FHIR source. "
-            "Ensure a Condition (SNOMED 281050002) or DocumentReference (LOINC 18842-5) exists."
-        )
-
-    # ── 7. Fetch Coverage (confirm Medicaid + state fallback) ─────────────────
-    coverage_bundle = await client.search("Coverage", {"patient": patientId})
-    if coverage_bundle:
-        data_sources_used.append("Coverage/Medicaid (payor confirmation)")
-        if not state_code:
-            state_code = _detect_state_from_coverage(coverage_bundle)
-            if state_code:
-                state_source = "Coverage.payor (text match)"
-
-    data_sources_used.insert(0, "Patient/Demographics")
-
-    # ── 8. Calculate cliff and urgency ────────────────────────────────────────
-    coverage_cliff = delivery_date + timedelta(days=STANDARD_CLIFF_DAYS)
-    today = date.today()
-    days_until_cliff = (coverage_cliff - today).days
-
-    # ── 9. Look up state policy ───────────────────────────────────────────────
-    policy = get_state_policy(state_code or "")
-    extended_end = delivery_date + timedelta(days=policy["months"] * 30)
-
-    # ── 10. Build response ────────────────────────────────────────────────────
-    patient_block = {
-        "name": patient_name,
-        "fhir_id": patientId,
-        "phone": phone,
-        "state": state_code or "UNKNOWN",
-        "state_source": state_source,
-        "delivery_date": delivery_date.isoformat(),
-        "standard_coverage_cliff_date": coverage_cliff.isoformat(),
-        "days_until_cliff": days_until_cliff,
-    }
-
-    state_policy_block = {
-        "state_code": state_code or "UNKNOWN",
-        "state_name": policy["name"],
-        "arpa_12_month_extension_available": policy["arpa"],
-        "extension_months": policy["months"],
-        "extended_coverage_end_if_approved": extended_end.isoformat(),
-        "agency_name": policy["agency"],
-        "agency_phone": policy["phone"],
-        "agency_website": policy["website"],
-        "agency_fax": policy["fax"],
-        "extension_form": policy["form"],
-        "form_number": policy["form_number"],
-        "policy_notes": policy["notes"],
-    }
-
-    if days_until_cliff > CRITICAL_THRESHOLD_DAYS:
-        # ── ROUTINE ───────────────────────────────────────────────────────────
-        result = {
-            "trajectory_os_analysis": {
-                "status": "ROUTINE",
-                "summary": (
-                    f"{patient_name}'s Medicaid coverage cliff is {days_until_cliff} days away "
-                    f"({coverage_cliff.isoformat()}). No immediate action required."
-                ),
-                "patient": patient_block,
-                "state_policy": state_policy_block,
-                "monitoring": {
-                    "action_required": False,
-                    "next_review_recommended": (
-                        coverage_cliff - timedelta(days=CRITICAL_THRESHOLD_DAYS)
-                    ).isoformat(),
-                    "note": (
-                        f"Re-run analysis when {CRITICAL_THRESHOLD_DAYS} or fewer days remain. "
-                        "Zero-Click interventions will activate automatically at that threshold."
-                    ),
-                },
-                "data_sources_used": data_sources_used,
-            }
-        }
-    else:
-        # ── CRITICAL ──────────────────────────────────────────────────────────
-        overdue_or_imminent = days_until_cliff <= 0
-        status_label = "EXPIRED" if overdue_or_imminent else "CRITICAL"
-        alert_msg = (
-            f"⚠️ MEDICAID COVERAGE {'HAS EXPIRED' if overdue_or_imminent else 'CLIFF IMMINENT'} — "
-            f"{patient_name} — "
-            f"{'Coverage ended' if overdue_or_imminent else f'{days_until_cliff} day(s) remaining'}"
-        )
-
-        result = {
-            "trajectory_os_analysis": {
-                "status": status_label,
-                "alert": alert_msg,
-                "summary": (
-                    f"{patient_name}'s standard Medicaid coverage "
-                    f"{'expired' if overdue_or_imminent else f'expires in {days_until_cliff} day(s)'} "
-                    f"on {coverage_cliff.isoformat()}. "
-                    f"{'Georgia' if state_code == 'GA' else policy['name']} offers a "
-                    f"{policy['months']}-month ARPA extension — apply immediately."
-                    if policy["arpa"]
-                    else f"This state has NOT adopted the ARPA extension. Escalate immediately."
-                ),
-                "patient": patient_block,
-                "state_policy": state_policy_block,
-                "zero_click_interventions": {
-                    "sms_draft": _build_sms_draft(
-                        patient_name, phone, days_until_cliff, coverage_cliff, policy
-                    ),
-                    "extension_form_prefilled": _build_extension_form(
-                        patient, patientId, delivery_date, coverage_cliff, policy
-                    ),
-                    "ob_appointment_flag": _build_ob_flag(delivery_date),
-                },
-                "data_sources_used": data_sources_used,
-            }
-        }
-
+    result = await compute_postpartum_analysis(patientId, ctx)
+    if isinstance(result, str):
+        return create_text_response(result, is_error=False)
     return create_text_response(json.dumps(result, indent=2))

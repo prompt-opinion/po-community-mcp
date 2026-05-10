@@ -25,6 +25,24 @@ class FhirClient:
             except httpx.HTTPStatusError:
                 raise
 
+    async def _post(self, path: str, body: dict) -> dict:
+        headers = {
+            "Content-Type": "application/fhir+json",
+            "Accept": "application/fhir+json",
+        }
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+        url = self._build_url(path)
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, headers=headers, json=body)
+            response.raise_for_status()
+            # Most FHIR servers return the created resource as JSON; some return
+            # just a Location header with an empty body — tolerate both.
+            try:
+                return response.json()
+            except ValueError:
+                return {"_status_code": response.status_code, "_location": response.headers.get("Location")}
+
     async def read(self, path: str) -> dict | None:
         return await self._get(path)
 
@@ -34,3 +52,8 @@ class FhirClient:
         search_parameters: dict[str, str] | None = None,
     ) -> dict | None:
         return await self._get(resource_type, params=search_parameters)
+
+    async def create(self, resource_type: str, body: dict) -> dict:
+        """POST a new resource. Server typically returns the persisted resource
+        with a server-assigned `id`."""
+        return await self._post(resource_type, body)
